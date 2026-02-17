@@ -1,84 +1,82 @@
-from supabase import create_client, Client
-from config import SUPABASE_URL, SUPABASE_KEY
+import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import random
 import string
+from datetime import datetime
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 class Database:
     def __init__(self):
-        self.supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        self.conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
     def generate_customer_code(self):
-        """Генерирует уникальный код клиента"""
         while True:
             letters = ''.join(random.choices(string.ascii_uppercase, k=2))
             numbers = ''.join(random.choices(string.digits, k=5))
             code = f"GD-{letters}{numbers}"
-            # Проверяем уникальность
-            result = self.supabase.table("users").select("customer_code").eq("customer_code", code).execute()
-            if not result.data:
-                return code
+            with self.conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) as cnt FROM users WHERE customer_code = %s", (code,))
+                result = cur.fetchone()
+                if result['cnt'] == 0:
+                    return code
 
     def get_or_create_user(self, telegram_id, username=None, first_name=None):
-        """Возвращает пользователя или создаёт нового"""
-        result = self.supabase.table("users").select("*").eq("telegram_id", telegram_id).execute()
-        
-        if result.data:
-            return result.data[0]
-        
-        # Создаём нового пользователя
-        customer_code = self.generate_customer_code()
-        new_user = self.supabase.table("users").insert({
-            "telegram_id": telegram_id,
-            "username": username or "",
-            "first_name": first_name or "",
-            "customer_code": customer_code,
-            "balance": 0.0
-        }).execute()
-        
-        return new_user.data[0]
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT * FROM users WHERE telegram_id = %s", (telegram_id,))
+            user = cur.fetchone()
+            if user:
+                return user
+
+            customer_code = self.generate_customer_code()
+            cur.execute("""
+                INSERT INTO users (telegram_id, username, first_name, customer_code, balance)
+                VALUES (%s, %s, %s, %s, %s) RETURNING *
+            """, (telegram_id, username or '', first_name or '', customer_code, 0.0))
+            self.conn.commit()
+            return cur.fetchone()
 
     def get_user(self, telegram_id):
-        """Получить пользователя по telegram_id"""
-        result = self.supabase.table("users").select("*").eq("telegram_id", telegram_id).execute()
-        return result.data[0] if result.data else None
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT * FROM users WHERE telegram_id = %s", (telegram_id,))
+            return cur.fetchone()
 
-    def update_balance(self, telegram_id, amount):
-        """Обновить баланс пользователя"""
-        user = self.get_user(telegram_id)
-        if not user:
-            return None
-        new_balance = user["balance"] + amount
-        result = self.supabase.table("users").update({"balance": new_balance}).eq("telegram_id", telegram_id).execute()
-        return result.data[0] if result.data else None
-
-    def add_track_code(self, telegram_id, track_code, description=""):
-        """Добавить трек-код"""
-        user = self.get_user(telegram_id)
-        if not user:
-            return None
-        
-        result = self.supabase.table("orders").insert({
-            "user_id": user["id"],
-            "track_code": track_code.upper(),
-            "status": "В обработке",
-            "description": description
-        }).execute()
-        
-        return result.data[0] if result.data else None
-
-    def get_user_orders(self, telegram_id):
-        """Получить все заказы пользователя"""
+    def get_user_track_codes(self, telegram_id):
         user = self.get_user(telegram_id)
         if not user:
             return []
-        
-        result = self.supabase.table("orders").select("track_code, status, description, created_at").eq("user_id", user["id"]).order("created_at", desc=True).execute()
-        return result.data
+        with self.conn.cursor() as cur:
+            cur.execute("""
+                SELECT track_code, description, status, created_date
+                FROM track_codes
+                WHERE user_id = %s
+                ORDER BY created_date DESC
+            """, (user['id'],))
+            return cur.fetchall()
+
+    def add_track_code(self, telegram_id, track_code, description=""):
+        user = self.get_user(telegram_id)
+        if not user:
+            return False
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO track_codes (user_id, track_code, description)
+                    VALUES (%s, %s, %s)
+                """, (user['id'], track_code.upper(), description))
+                self.conn.commit()
+            return True
+        except Exception:
+            return False
 
     def get_exchange_rates(self):
-        """Получить курсы валют"""
-        result = self.supabase.table("exchange_rates").select("*").order("currency_code").execute()
-        return result.data
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT * FROM exchange_rates ORDER BY currency_code")
+            return cur.fetchall()
 
-# Глобальный экземпляр
+    def is_admin(self, telegram_id):
+        user = self.get_user(telegram_id)
+        return user and user.get('is_admin', False)
+
 db = Database()
