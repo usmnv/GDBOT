@@ -25,10 +25,9 @@ class Database:
 
     def register_user(self, user_id, username, first_name, last_name, phone_number, is_admin=False):
         """Регистрирует нового пользователя или обновляет существующего"""
-        # Проверяем, существует ли пользователь
         user = self.get_user(user_id)
         if user:
-            # Пользователь существует, обновляем данные и возвращаем код
+            # Пользователь уже есть, обновляем данные
             with self.conn.cursor() as cur:
                 cur.execute("""
                     UPDATE users 
@@ -37,8 +36,7 @@ class Database:
                 """, (username, first_name, last_name, phone_number, is_admin, user_id))
                 self.conn.commit()
             return user['customer_code']
-
-        # Создаём нового пользователя
+        # Создаём нового
         customer_code = self.generate_customer_code()
         with self.conn.cursor() as cur:
             cur.execute("""
@@ -54,6 +52,11 @@ class Database:
         with self.conn.cursor() as cur:
             cur.execute("SELECT * FROM users WHERE telegram_id = %s", (telegram_id,))
             return cur.fetchone()
+
+    def is_admin(self, telegram_id):
+        """Проверяет, является ли пользователь администратором"""
+        user = self.get_user(telegram_id)
+        return user and user.get('is_admin', False)
 
     def get_user_track_codes(self, telegram_id):
         """Возвращает трек-коды пользователя"""
@@ -83,10 +86,6 @@ class Database:
                 self.conn.commit()
             return True
         except psycopg2.IntegrityError:
-            # Трек-код уже существует
-            return False
-        except Exception as e:
-            print(f"Error adding track code: {e}")
             return False
 
     def update_track_code_status(self, track_code_id, new_status):
@@ -158,16 +157,12 @@ class Database:
         with self.conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) as cnt FROM users")
             total_users = cur.fetchone()['cnt']
-            
             cur.execute("SELECT COUNT(*) as cnt FROM users WHERE is_admin = TRUE")
             admin_users = cur.fetchone()['cnt']
-            
             cur.execute("SELECT COUNT(*) as cnt FROM track_codes")
             total_track_codes = cur.fetchone()['cnt']
-            
             cur.execute("SELECT COUNT(*) as cnt FROM track_codes WHERE status = 'Доставлен'")
             delivered = cur.fetchone()['cnt']
-            
             return {
                 'total_users': total_users,
                 'admin_users': admin_users,
@@ -184,10 +179,4 @@ class Database:
                 cur.execute("SELECT * FROM users WHERE is_admin = FALSE ORDER BY registration_date DESC")
             return cur.fetchall()
 
-    def is_admin(self, telegram_id):
-        """Проверяет, является ли пользователь администратором"""
-        user = self.get_user(telegram_id)
-        return user and user.get('is_admin', False)
-
-# Глобальный экземпляр базы данных
 db = Database()
