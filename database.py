@@ -1,6 +1,6 @@
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg2  # было pyscopg2 — исправлено
+from psycopg2.extras import RealDictCursor  # было pyscopg2 — исправлено
 import random
 import string
 from datetime import datetime
