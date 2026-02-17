@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional
@@ -48,15 +49,22 @@ async def lifespan(app: FastAPI):
     # Регистрируем все обработчики
     register_handlers(telegram_app)
     
+    # Сбрасываем вебхук (на случай, если он был установлен ранее)
+    await telegram_app.bot.delete_webhook(drop_pending_updates=True)
+    
     # Инициализируем и запускаем бота
     await telegram_app.initialize()
     await telegram_app.start()
     
-    logger.info("✅ Telegram бот запущен")
+    # Запускаем polling (получение обновлений) в фоновом режиме
+    asyncio.create_task(telegram_app.updater.start_polling())
+    
+    logger.info("✅ Telegram бот запущен и получает обновления")
     
     yield
     
     # Остановка бота
+    await telegram_app.updater.stop()
     await telegram_app.stop()
     await telegram_app.shutdown()
     logger.info("🛑 Telegram бот остановлен")
@@ -1141,7 +1149,7 @@ async def api_track_order(track_code: str):
         SELECT track_code, status, description, created_date, u.customer_code
         FROM track_codes tc
         LEFT JOIN users u ON tc.user_id = u.user_id
-        WHERE track_code = ?
+        WHERE track_code = %s
     """, (track_code.upper(),))
     row = cursor.fetchone()
     
