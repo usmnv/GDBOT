@@ -38,6 +38,11 @@ EXCHANGE_SELECT_FROM, EXCHANGE_SELECT_TO, EXCHANGE_ENTER_AMOUNT = range(10, 13)
 # ------------------------- Глобальные переменные -------------------------
 telegram_app = None
 
+# ------------------------- ОБРАБОТЧИК ОШИБОК -------------------------
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Глобальный обработчик ошибок"""
+    logger.error("Exception while handling an update:", exc_info=context.error)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Инициализация и завершение работы бота"""
@@ -45,6 +50,9 @@ async def lifespan(app: FastAPI):
     
     # Создаём приложение бота
     telegram_app = Application.builder().token(BOT_TOKEN).build()
+    
+    # Добавляем обработчик ошибок
+    telegram_app.add_error_handler(error_handler)
     
     # Регистрируем все обработчики
     register_handlers(telegram_app)
@@ -156,7 +164,6 @@ async def personal_cabinet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_count = len(track_codes)
     
     # URL мини-приложения (GitHub Pages)
-    # ⚠️ ЗАМЕНИТЕ НА ВАШ РЕАЛЬНЫЙ URL
     webapp_url = f"https://usmnv.github.io/Gd-cargo/?code={user_data['customer_code']}"
     
     keyboard = [[
@@ -179,7 +186,7 @@ async def personal_cabinet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(info_text, reply_markup=reply_markup)
 
 async def exchange_rates_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показ курсов валют"""
+    """Показ курсов валют (без индексов)"""
     rates = db.get_exchange_rates()
     if not rates:
         await update.message.reply_text("Курсы валют временно недоступны.")
@@ -187,24 +194,24 @@ async def exchange_rates_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     text = "💱 Текущие курсы валют:\n\n"
     for rate in rates:
-        text += f"{rate[2]} {rate[3]}: {rate[1]} RUB\n"
+        text += f"{rate['flag']} {rate['name']}: {rate['rate']} RUB\n"
     await update.message.reply_text(text)
 
 async def delivery_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Меню доставки"""
+    """Меню доставки (без индексов)"""
     methods = db.get_delivery_methods()
     if not methods:
         await update.message.reply_text("Информация о доставке временно недоступна.")
         return
     
-    keyboard = [[f"{m[5]} {m[1]}"] for m in methods] + [["🔙 Назад"]]
+    keyboard = [[f"{m['icon']} {m['method_name']}"] for m in methods] + [["🔙 Назад"]]
     await update.message.reply_text(
         "🚚 Выберите способ доставки:",
         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     )
 
 async def handle_delivery_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Детали выбранного способа доставки"""
+    """Детали выбранного способа доставки (без индексов)"""
     text = update.message.text
     
     if text == "🔙 Назад":
@@ -217,13 +224,14 @@ async def handle_delivery_method(update: Update, context: ContextTypes.DEFAULT_T
     methods = db.get_delivery_methods()
     
     for m in methods:
-        if m[1] == method_text:
+        if m['method_name'] == method_text:
+            price = m['price_per_kg']
             await update.message.reply_text(
-                f"{m[5]} {m[1]}\n\n"
-                f"💰 Цена: ${m[2]} за кг\n"
-                f"📅 Срок: {m[3]}-{m[4]} дней\n"
-                f"📝 {m[6]}\n\n"
-                f"Пример: 5 кг = ${m[2] * 5}"
+                f"{m['icon']} {m['method_name']}\n\n"
+                f"💰 Цена: ${price} за кг\n"
+                f"📅 Срок: {m['min_days']}-{m['max_days']} дней\n"
+                f"📝 {m['description']}\n\n"
+                f"Пример: 5 кг = ${price * 5}"
             )
             return
     
@@ -306,7 +314,7 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
     else:
         await update.message.reply_text("Склад не найден.")
 
-# ------------------------- ОБМЕН ВАЛЮТ -------------------------
+# ------------------------- ОБМЕН ВАЛЮТ (исправленный) -------------------------
 async def exchange_currency_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало обмена валют"""
     user_id = update.effective_user.id
@@ -321,7 +329,8 @@ async def exchange_currency_start(update: Update, context: ContextTypes.DEFAULT_
 
     context.user_data['exchange_rates'] = rates
 
-    all_currencies = [f"{r[2]} {r[3]}" for r in rates] + ["🇷🇺 RUB (Российский рубль)"]
+    # Формируем список валют: все из БД + RUB
+    all_currencies = [f"{r['flag']} {r['name']}" for r in rates] + ["🇷🇺 RUB (Российский рубль)"]
     keyboard = []
     for i in range(0, len(all_currencies), 2):
         keyboard.append(all_currencies[i:i+2])
@@ -346,9 +355,10 @@ async def exchange_select_from(update: Update, context: ContextTypes.DEFAULT_TYP
     rates = context.user_data['exchange_rates']
     selected_from = None
 
+    # Ищем валюту в списке курсов
     for r in rates:
-        if f"{r[2]} {r[3]}" in text:
-            selected_from = ('currency', r[0], r[1], r[2], r[3])
+        if f"{r['flag']} {r['name']}" in text:
+            selected_from = ('currency', r['currency_code'], r['rate'], r['flag'], r['name'])
             break
     if "🇷🇺 RUB" in text:
         selected_from = ('rub', 'RUB', 1.0, '🇷🇺', 'Российский рубль')
@@ -359,10 +369,11 @@ async def exchange_select_from(update: Update, context: ContextTypes.DEFAULT_TYP
 
     context.user_data['exchange_from'] = selected_from
 
+    # Готовим список доступных целевых валют (исключая исходную)
     all_currencies = []
     for r in rates:
-        if r[0] != selected_from[1]:
-            all_currencies.append(f"{r[2]} {r[3]}")
+        if r['currency_code'] != selected_from[1]:
+            all_currencies.append(f"{r['flag']} {r['name']}")
     if selected_from[1] != 'RUB':
         all_currencies.append("🇷🇺 RUB (Российский рубль)")
 
@@ -390,8 +401,8 @@ async def exchange_select_to(update: Update, context: ContextTypes.DEFAULT_TYPE)
     selected_to = None
 
     for r in rates:
-        if f"{r[2]} {r[3]}" in text and r[0] != from_data[1]:
-            selected_to = ('currency', r[0], r[1], r[2], r[3])
+        if f"{r['flag']} {r['name']}" in text and r['currency_code'] != from_data[1]:
+            selected_to = ('currency', r['currency_code'], r['rate'], r['flag'], r['name'])
             break
     if "🇷🇺 RUB" in text and from_data[1] != 'RUB':
         selected_to = ('rub', 'RUB', 1.0, '🇷🇺', 'Российский рубль')
@@ -427,22 +438,25 @@ async def exchange_enter_amount(update: Update, context: ContextTypes.DEFAULT_TY
         to_data = context.user_data['exchange_to']
         rates = context.user_data['exchange_rates']
 
+        # Получаем курс исходной валюты к RUB
         if from_data[0] == 'rub':
             rate_from_rub = 1.0
         else:
-            rate_from_rub = next((r[1] for r in rates if r[0] == from_data[1]), None)
+            rate_from_rub = next((r['rate'] for r in rates if r['currency_code'] == from_data[1]), None)
             if rate_from_rub is None:
                 await update.message.reply_text("Курс исходной валюты не найден.")
                 return ConversationHandler.END
 
+        # Получаем курс целевой валюты к RUB
         if to_data[0] == 'rub':
             rate_to_rub = 1.0
         else:
-            rate_to_rub = next((r[1] for r in rates if r[0] == to_data[1]), None)
+            rate_to_rub = next((r['rate'] for r in rates if r['currency_code'] == to_data[1]), None)
             if rate_to_rub is None:
                 await update.message.reply_text("Курс целевой валюты не найден.")
                 return ConversationHandler.END
 
+        # Конвертация через RUB
         amount_in_rub = amount * rate_from_rub if from_data[0] != 'rub' else amount
         result = amount_in_rub / rate_to_rub if to_data[0] != 'rub' else amount_in_rub
 
@@ -528,7 +542,7 @@ async def change_exchange_rate(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     
     rates = db.get_exchange_rates()
-    keyboard = [[f"{r[2]} {r[3]} (текущий: {r[1]} RUB)"] for r in rates] + [["🔙 Назад"]]
+    keyboard = [[f"{r['flag']} {r['name']} (текущий: {r['rate']} RUB)"] for r in rates] + [["🔙 Назад"]]
     context.user_data['rates'] = rates
     
     await update.message.reply_text(
@@ -546,13 +560,13 @@ async def select_currency_for_change(update: Update, context: ContextTypes.DEFAU
         return ConversationHandler.END
     
     for r in context.user_data.get('rates', []):
-        if f"{r[2]} {r[3]}" in text:
-            context.user_data['selected_currency'] = r[0]
-            context.user_data['currency_name'] = r[3]
-            context.user_data['flag'] = r[2]
-            context.user_data['current_rate'] = r[1]
+        if f"{r['flag']} {r['name']}" in text:
+            context.user_data['selected_currency'] = r['currency_code']
+            context.user_data['currency_name'] = r['name']
+            context.user_data['flag'] = r['flag']
+            context.user_data['current_rate'] = r['rate']
             await update.message.reply_text(
-                f"Выбрана валюта: {r[2]} {r[3]}\nТекущий курс: {r[1]} RUB\n\nВведите новый курс:"
+                f"Выбрана валюта: {r['flag']} {r['name']}\nТекущий курс: {r['rate']} RUB\n\nВведите новый курс:"
             )
             return ENTER_NEW_RATE
     
@@ -593,7 +607,7 @@ async def change_delivery_price(update: Update, context: ContextTypes.DEFAULT_TY
         return
     
     methods = db.get_delivery_methods()
-    keyboard = [[f"{m[5]} {m[1]} (${m[2]}/кг)"] for m in methods] + [["🔙 Назад"]]
+    keyboard = [[f"{m['icon']} {m['method_name']} (${m['price_per_kg']}/кг)"] for m in methods] + [["🔙 Назад"]]
     context.user_data['delivery_methods'] = methods
     
     await update.message.reply_text(
@@ -626,13 +640,13 @@ async def select_delivery_for_change(update: Update, context: ContextTypes.DEFAU
             return ENTER_NEW_DAYS
     else:
         for m in context.user_data.get('delivery_methods', []):
-            if f"{m[5]} {m[1]}" in text:
-                context.user_data['selected_method'] = m[0]
-                context.user_data['method_name'] = m[1]
-                context.user_data['current_price'] = m[2]
-                context.user_data['min_days'] = m[3]
-                context.user_data['max_days'] = m[4]
-                context.user_data['icon'] = m[5]
+            if f"{m['icon']} {m['method_name']}" in text:
+                context.user_data['selected_method'] = m['method_code']
+                context.user_data['method_name'] = m['method_name']
+                context.user_data['current_price'] = m['price_per_kg']
+                context.user_data['min_days'] = m['min_days']
+                context.user_data['max_days'] = m['max_days']
+                context.user_data['icon'] = m['icon']
                 
                 keyboard = [
                     ["💰 Изменить цену за кг"],
@@ -640,9 +654,9 @@ async def select_delivery_for_change(update: Update, context: ContextTypes.DEFAU
                     ["🔙 Назад"]
                 ]
                 await update.message.reply_text(
-                    f"📝 Выбран способ: {m[5]} {m[1]}\n\n"
-                    f"💰 Текущая цена: ${m[2]}/кг\n"
-                    f"📅 Текущие сроки: {m[3]}-{m[4]} дней\n\n"
+                    f"📝 Выбран способ: {m['icon']} {m['method_name']}\n\n"
+                    f"💰 Текущая цена: ${m['price_per_kg']}/кг\n"
+                    f"📅 Текущие сроки: {m['min_days']}-{m['max_days']} дней\n\n"
                     f"Что хотите изменить?",
                     reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 )
@@ -724,9 +738,9 @@ async def manage_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     
     for o in orders:
-        status_icon = "🟡" if o[2] == "В обработке" else "🟢" if o[2] == "Доставлен" else "🔴"
-        text += f"{status_icon} {o[1]}\nКлиент: {o[4] or 'Неизвестен'}\nСтатус: {o[2]}\n\n"
-        keyboard.append([f"{o[1]} - {o[2]}"])
+        status_icon = "🟡" if o['status'] == "В обработке" else "🟢" if o['status'] == "Доставлен" else "🔴"
+        text += f"{status_icon} {o['track_code']}\nКлиент: {o['customer_code'] or 'Неизвестен'}\nСтатус: {o['status']}\n\n"
+        keyboard.append([f"{o['track_code']} - {o['status']}"])
     
     keyboard.append(["🔙 Назад"])
     context.user_data['recent_orders'] = orders
@@ -749,18 +763,18 @@ async def select_order_for_status_change(update: Update, context: ContextTypes.D
     orders = context.user_data.get('recent_orders', [])
     
     for o in orders:
-        if o[1] == track_code:
-            context.user_data['selected_order_id'] = o[0]
-            context.user_data['selected_track_code'] = o[1]
-            context.user_data['current_status'] = o[2]
-            context.user_data['customer_code'] = o[4]
+        if o['track_code'] == track_code:
+            context.user_data['selected_order_id'] = o['id']
+            context.user_data['selected_track_code'] = o['track_code']
+            context.user_data['current_status'] = o['status']
+            context.user_data['customer_code'] = o['customer_code']
             
             keyboard = [
                 ["🟡 В обработке"], ["🟢 Доставлен"], ["🔴 Отменен"],
                 ["🚚 В пути"], ["📦 На складе"], ["🔙 Назад"]
             ]
             await update.message.reply_text(
-                f"📦 Заказ: {o[1]}\n👤 Клиент: {o[4] or 'Неизвестен'}\n📅 Дата: {o[3]}\n📊 Текущий статус: {o[2]}\n\n"
+                f"📦 Заказ: {o['track_code']}\n👤 Клиент: {o['customer_code'] or 'Неизвестен'}\n📅 Дата: {o['created_date']}\n📊 Текущий статус: {o['status']}\n\n"
                 f"Выберите новый статус:",
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             )
@@ -974,7 +988,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await broadcast_message(update, context)
     elif text == "👥 Пользователи" and is_admin:
         users = db.get_all_users(include_admins=True)
-        admins = sum(1 for u in users if u[7] == 1)
+        admins = sum(1 for u in users if u['is_admin'] == 1)
         await update.message.reply_text(
             f"👥 Пользователи:\n\nВсего: {len(users)}\nАдминов: {admins}\nОбычных: {len(users)-admins}"
         )
@@ -1104,7 +1118,7 @@ async def api_get_user(telegram_id: int):
         "customer_code": user["customer_code"],
         "balance": user["balance"],
         "orders_count": len(orders),
-        "delivered_count": sum(1 for o in orders if o[2] == "Доставлен"),
+        "delivered_count": sum(1 for o in orders if o["status"] == "Доставлен"),
         "first_name": user["first_name"],
         "phone_number": user["phone_number"]
     }
@@ -1117,10 +1131,10 @@ async def api_get_orders(telegram_id: int):
     result = []
     for o in orders:
         result.append({
-            "track_code": o[0],
-            "description": o[1],
-            "status": o[2],
-            "date": str(o[3]) if o[3] else ""
+            "track_code": o["track_code"],
+            "description": o["description"],
+            "status": o["status"],
+            "date": str(o["created_date"]) if o["created_date"] else ""
         })
     
     return {"orders": result}
@@ -1133,10 +1147,10 @@ async def api_get_exchange_rates():
     result = []
     for r in rates:
         result.append({
-            "code": r[0],
-            "rate": r[1],
-            "flag": r[2],
-            "name": r[3]
+            "code": r["currency_code"],
+            "rate": r["rate"],
+            "flag": r["flag"],
+            "name": r["name"]
         })
     
     return {"rates": result}
@@ -1148,7 +1162,7 @@ async def api_track_order(track_code: str):
     cursor.execute("""
         SELECT track_code, status, description, created_date, u.customer_code
         FROM track_codes tc
-        LEFT JOIN users u ON tc.user_id = u.user_id
+        LEFT JOIN users u ON tc.user_id = u.id
         WHERE track_code = %s
     """, (track_code.upper(),))
     row = cursor.fetchone()
@@ -1157,11 +1171,11 @@ async def api_track_order(track_code: str):
         raise HTTPException(status_code=404, detail="Track code not found")
     
     return {
-        "track_code": row[0],
-        "status": row[1],
-        "description": row[2],
-        "date": str(row[3]) if row[3] else "",
-        "customer_code": row[4]
+        "track_code": row["track_code"],
+        "status": row["status"],
+        "description": row["description"],
+        "date": str(row["created_date"]) if row["created_date"] else "",
+        "customer_code": row["customer_code"]
     }
 
 @app.get("/health")
