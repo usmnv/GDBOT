@@ -79,13 +79,22 @@ def get_main_keyboard(is_admin=False):
         ["👤 Личный кабинет"],
         ["📦 Фулфилмент"],
         ["💰 Курсы валют", "💱 Обмен валют"],
-        ["🚚 Доставка карго", "📄 Белая доставка"],
-        ["✈️ Авиа доставка", "🚆 Ж/Д доставка"],
+        ["🚚 Доставка", "📄 Белая доставка"],
         ["🏭 Склады в Китае"],
         ["🆘 Поддержка"]
     ]
     if is_admin:
         keyboard.append(["⚙️ Админ-панель"])
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def get_delivery_keyboard():
+    """Клавиатура выбора доставки"""
+    keyboard = [
+        ["🚚 Авто карго"],
+        ["✈️ Авиа доставка"],
+        ["🚆 Ж/Д доставка"],
+        ["🔙 Назад"]
+    ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 # ------------------------- ОСНОВНЫЕ ОБРАБОТЧИКИ -------------------------
@@ -223,9 +232,17 @@ async def fullfilment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Интеграция с вашими магазинами\n\n"
         "👤 **Менеджер:** @fullfilment_manager\n"
         "📱 **WhatsApp:** +7 999 111 22 33\n"
-        "💬 **WeChat:** gd_fulfill"
+        "💬 **WeChat:** gd_fulfill\n\n"
+        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
     )
     await update.message.reply_text(text, parse_mode='Markdown')
+
+async def delivery_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню выбора доставки"""
+    await update.message.reply_text(
+        "🚚 Выберите вид доставки:",
+        reply_markup=get_delivery_keyboard()
+    )
 
 async def delivery_avia(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Информация об авиа доставке"""
@@ -237,7 +254,8 @@ async def delivery_avia(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Отправка от 1 кг\n\n"
         "💰 **Стоимость:** от 10$/кг\n\n"
         "👤 **Менеджер:** @avia_manager\n"
-        "📱 **WhatsApp:** +7 999 123 45 67"
+        "📱 **WhatsApp:** +7 999 123 45 67\n\n"
+        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
     )
     await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -251,7 +269,8 @@ async def delivery_cargo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Доставка 'от двери до двери'\n\n"
         "💰 **Стоимость:** от 5$/кг\n\n"
         "👤 **Менеджер:** @auto_manager\n"
-        "📱 **WhatsApp:** +7 999 234 56 78"
+        "📱 **WhatsApp:** +7 999 234 56 78\n\n"
+        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
     )
     await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -265,7 +284,8 @@ async def delivery_rail(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Стабильные сроки\n\n"
         "💰 **Стоимость:** от 7$/кг\n\n"
         "👤 **Менеджер:** @rail_manager\n"
-        "📱 **WhatsApp:** +7 999 345 67 89"
+        "📱 **WhatsApp:** +7 999 345 67 89\n\n"
+        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
     )
     await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -279,7 +299,8 @@ async def delivery_white(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ НДС и пошлины включены\n\n"
         "💰 **Стоимость:** от 15$/кг\n\n"
         "👤 **Менеджер:** @white_manager\n"
-        "📱 **WhatsApp:** +7 999 456 78 90"
+        "📱 **WhatsApp:** +7 999 456 78 90\n\n"
+        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
     )
     await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -291,9 +312,11 @@ async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📱 **WhatsApp:** +7 999 123 45 67\n"
         "💬 **WeChat:** golden_dragon_cn\n\n"
         "👤 **Менеджер по доставке:** @delivery_manager\n"
-        "📱 **WhatsApp:** +7 999 234 56 78\n\n"
+        "📱 **WhatsApp:** +7 999 234 56 78\n"
+        "💬 **WeChat:** delivery_gd\n\n"
         "👤 **Менеджер по фулфилменту:** @fulfillment_support\n"
-        "📱 **WhatsApp:** +7 999 345 67 89\n\n"
+        "📱 **WhatsApp:** +7 999 345 67 89\n"
+        "💬 **WeChat:** fulfillment_gd\n\n"
         "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
     )
     await update.message.reply_text(text, parse_mode='Markdown')
@@ -325,17 +348,17 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
         "🏭 Склад Иу": {
             "address": "浙江省义乌市国际商贸城, 义乌, 322000, Китай",
             "conditions": "✅ Минимальный вес: 5 кг\n✅ Приёмка: 0.5$/кг\n✅ Хранение: 3 дня бесплатно",
-            "contact": "📞 Менеджер: +86 123 4567 8901"
+            "contact": "📞 Менеджер: +86 123 4567 8901\n⏰ Время работы: 9:00 - 18:00 (МСК)"
         },
         "🏭 Склад Гуанчжоу": {
             "address": "广州市白云区机场路, 广州, 510000, Китай",
             "conditions": "✅ Минимальный вес: 10 кг\n✅ Приёмка: 0.3$/кг\n✅ Хранение: 5 дней бесплатно",
-            "contact": "📞 Менеджер: +86 123 4567 8902"
+            "contact": "📞 Менеджер: +86 123 4567 8902\n⏰ Время работы: 9:00 - 18:00 (МСК)"
         },
         "🏭 Склад Урумчи": {
             "address": "新疆乌鲁木齐市经济开发区, 乌鲁木齐, 830000, Китай",
             "conditions": "✅ Минимальный вес: 3 кг\n✅ Приёмка: 0.4$/кг\n✅ Хранение: 7 дней бесплатно",
-            "contact": "📞 Менеджер: +86 123 4567 8903"
+            "contact": "📞 Менеджер: +86 123 4567 8903\n⏰ Время работы: 9:00 - 18:00 (МСК)"
         }
     }
     
@@ -986,14 +1009,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await exchange_rates_menu(update, context)
     elif text == "💱 Обмен валют":
         pass  # ConversationHandler
-    elif text == "🚚 Доставка карго":
+    elif text == "🚚 Доставка":
+        await delivery_menu(update, context)
+    elif text == "🚚 Авто карго":
         await delivery_cargo(update, context)
-    elif text == "📄 Белая доставка":
-        await delivery_white(update, context)
     elif text == "✈️ Авиа доставка":
         await delivery_avia(update, context)
     elif text == "🚆 Ж/Д доставка":
         await delivery_rail(update, context)
+    elif text == "📄 Белая доставка":
+        await delivery_white(update, context)
     elif text == "🏭 Склады в Китае":
         await warehouses_menu(update, context)
     elif text.startswith("🏭 Склад"):
