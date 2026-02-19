@@ -8,7 +8,6 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
 import uvicorn
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
@@ -74,7 +73,7 @@ app.add_middleware(
 
 # ------------------------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ -------------------------
 def get_main_keyboard(is_admin=False):
-    """Главная клавиатура с новыми пунктами"""
+    """Главная клавиатура с правильным расположением кнопок"""
     keyboard = [
         ["👤 Личный кабинет"],
         ["📦 Фулфилмент"],
@@ -88,7 +87,7 @@ def get_main_keyboard(is_admin=False):
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_delivery_keyboard():
-    """Клавиатура выбора доставки"""
+    """Клавиатура выбора доставки (3 вида)"""
     keyboard = [
         ["🚚 Авто карго"],
         ["✈️ Авиа доставка"],
@@ -210,6 +209,21 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         await update.message.reply_text("Использование: /pay сумма")
 
+async def fullfilment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Информация о фулфилменте"""
+    text = (
+        "📦 **Фулфилмент**\n\n"
+        "Мы берём на себя всё: приём, хранение, упаковку и отправку ваших заказов.\n"
+        "✅ Бесплатное хранение до 7 дней\n"
+        "✅ Фото‑ и видеоотчёт\n"
+        "✅ Интеграция с вашими магазинами\n\n"
+        "👤 **Менеджер:** @fulfilment_manager\n"
+        "📱 **WhatsApp:** +7 999 111 22 33\n"
+        "💬 **WeChat:** gd_fulfill\n\n"
+        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
+    )
+    await update.message.reply_text(text, parse_mode='Markdown')
+
 async def exchange_rates_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показ курсов валют"""
     rates = db.get_exchange_rates()
@@ -222,20 +236,7 @@ async def exchange_rates_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
         text += f"{rate['flag']} {rate['name']}: {rate['rate']} RUB\n"
     await update.message.reply_text(text)
 
-async def fullfilment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Информация о фулфилменте"""
-    text = (
-        "📦 **Фулфилмент**\n\n"
-        "Мы берём на себя всё: приём, хранение, упаковку и отправку ваших заказов.\n"
-        "✅ Бесплатное хранение до 7 дней\n"
-        "✅ Фото‑ и видеоотчёт\n"
-        "✅ Интеграция с вашими магазинами\n\n"
-        "👤 **Менеджер:** @fullfilment_manager\n"
-        "📱 **WhatsApp:** +7 999 111 22 33\n"
-        "💬 **WeChat:** gd_fulfill\n\n"
-        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
-    )
-    await update.message.reply_text(text, parse_mode='Markdown')
+# --- ДОСТАВКА: 3 отдельных вида ---
 
 async def delivery_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню выбора доставки"""
@@ -290,33 +291,24 @@ async def delivery_rail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode='Markdown')
 
 async def delivery_white(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Информация о белой доставке"""
+    """Информация о белой доставке (полное таможенное оформление)"""
     text = (
-        "📄 **Белая доставка**\n\n"
-        "✅ Полное таможенное оформление\n"
-        "✅ Все документы предоставляются\n"
-        "✅ Работа с юридическими лицами\n"
-        "✅ НДС и пошлины включены\n\n"
-        "💰 **Стоимость:** от 15$/кг\n\n"
-        "👤 **Менеджер:** @white_manager\n"
-        "📱 **WhatsApp:** +7 999 456 78 90\n\n"
-        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
-    )
-    await update.message.reply_text(text, parse_mode='Markdown')
-
-async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Поддержка с контактами менеджеров"""
-    text = (
-        "🆘 **Поддержка**\n\n"
-        "👤 **Основной менеджер:** @goldendragon_manager\n"
-        "📱 **WhatsApp:** +7 999 123 45 67\n"
-        "💬 **WeChat:** golden_dragon_cn\n\n"
-        "👤 **Менеджер по доставке:** @delivery_manager\n"
-        "📱 **WhatsApp:** +7 999 234 56 78\n"
-        "💬 **WeChat:** delivery_gd\n\n"
-        "👤 **Менеджер по фулфилменту:** @fulfillment_support\n"
-        "📱 **WhatsApp:** +7 999 345 67 89\n"
-        "💬 **WeChat:** fulfillment_gd\n\n"
+        "📄 **Белая доставка (с таможенным оформлением)**\n\n"
+        "✅ **Полное таможенное оформление** груза\n"
+        "✅ **Все необходимые документы** предоставляются\n"
+        "✅ **Работа с юридическими лицами** (договор, счёт, закрывающие документы)\n"
+        "✅ **НДС и пошлины** включены в стоимость\n"
+        "✅ **Сертификация и декларирование** товаров\n"
+        "✅ **Индивидуальный подход** к каждому грузу\n\n"
+        "💰 **Стоимость:** от 15$/кг (в зависимости от категории товара)\n\n"
+        "📋 **Что входит в услугу:**\n"
+        "• Подготовка таможенной декларации\n"
+        "• Расчёт таможенных платежей\n"
+        "• Сопровождение при прохождении таможни\n"
+        "• Доставка с таможенным оформлением \"под ключ\"\n\n"
+        "👤 **Менеджер:** @white_delivery_manager\n"
+        "📱 **WhatsApp:** +7 999 456 78 90\n"
+        "💬 **WeChat:** white_delivery_gd\n\n"
         "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
     )
     await update.message.reply_text(text, parse_mode='Markdown')
@@ -371,9 +363,28 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
     else:
         await update.message.reply_text("Склад не найден.")
 
-# ------------------------- ОБМЕН ВАЛЮТ -------------------------
+async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Поддержка с контактами менеджеров"""
+    text = (
+        "🆘 **Поддержка**\n\n"
+        "👤 **Основной менеджер:** @goldendragon_manager\n"
+        "📱 **WhatsApp:** +7 999 123 45 67\n"
+        "💬 **WeChat:** golden_dragon_cn\n\n"
+        "👤 **Менеджер по доставке:** @delivery_manager\n"
+        "📱 **WhatsApp:** +7 999 234 56 78\n"
+        "💬 **WeChat:** delivery_gd\n\n"
+        "👤 **Менеджер по фулфилменту:** @fulfillment_support\n"
+        "📱 **WhatsApp:** +7 999 345 67 89\n"
+        "💬 **WeChat:** fulfillment_gd\n\n"
+        "👤 **Менеджер по белой доставке:** @white_delivery_manager\n"
+        "📱 **WhatsApp:** +7 999 456 78 90\n"
+        "💬 **WeChat:** white_delivery_gd\n\n"
+        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
+    )
+    await update.message.reply_text(text, parse_mode='Markdown')
+
+# --- ОБМЕН ВАЛЮТ (полная версия) ---
 async def exchange_currency_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало обмена валют"""
     user_id = update.effective_user.id
     if not db.get_user(user_id):
         await update.message.reply_text("Пожалуйста, сначала зарегистрируйтесь через /start")
@@ -399,7 +410,6 @@ async def exchange_currency_start(update: Update, context: ContextTypes.DEFAULT_
     return EXCHANGE_SELECT_FROM
 
 async def exchange_select_from(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор исходной валюты"""
     text = update.message.text.strip()
     
     if text == "🔙 Назад":
@@ -444,7 +454,6 @@ async def exchange_select_from(update: Update, context: ContextTypes.DEFAULT_TYP
     return EXCHANGE_SELECT_TO
 
 async def exchange_select_to(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор целевой валюты"""
     text = update.message.text.strip()
     
     if text == "🔙 Назад":
@@ -476,7 +485,6 @@ async def exchange_select_to(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return EXCHANGE_ENTER_AMOUNT
 
 async def exchange_enter_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ввод суммы и расчёт"""
     text = update.message.text.strip()
     
     if text == "🔙 Назад":
@@ -532,9 +540,8 @@ async def exchange_enter_amount(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("Пожалуйста, введите корректное число (например 100.50).")
         return EXCHANGE_ENTER_AMOUNT
 
-# ------------------------- АДМИН-ФУНКЦИИ -------------------------
+# --- АДМИН-ФУНКЦИИ (полная версия из вашего файла) ---
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Панель администратора"""
     user_id = update.effective_user.id
     if not db.is_admin(user_id):
         await update.message.reply_text("У вас нет доступа к админ-панели.")
@@ -555,12 +562,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Регистрация администратора"""
     await update.message.reply_text("Введите код доступа для регистрации администратора:")
     return ADMIN_CODE
 
 async def handle_admin_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Проверка кода администратора"""
     user = update.effective_user
     code = update.message.text.strip()
     
@@ -583,7 +588,6 @@ async def handle_admin_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ADMIN_CODE
 
 async def change_exchange_rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Изменение курса валюты"""
     user_id = update.effective_user.id
     if not db.is_admin(user_id):
         await update.message.reply_text("У вас нет доступа.")
@@ -600,13 +604,10 @@ async def change_exchange_rate(update: Update, context: ContextTypes.DEFAULT_TYP
     return SELECT_CURRENCY
 
 async def select_currency_for_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор валюты для изменения"""
     text = update.message.text
-    
     if text == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return ConversationHandler.END
-    
     for r in context.user_data.get('rates', []):
         if f"{r['flag']} {r['name']}" in text:
             context.user_data['selected_currency'] = r['currency_code']
@@ -617,25 +618,19 @@ async def select_currency_for_change(update: Update, context: ContextTypes.DEFAU
                 f"Выбрана валюта: {r['flag']} {r['name']}\nТекущий курс: {r['rate']} RUB\n\nВведите новый курс:"
             )
             return ENTER_NEW_RATE
-    
     await update.message.reply_text("Валюта не найдена.")
     return ConversationHandler.END
 
 async def enter_new_rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ввод нового курса"""
     text = update.message.text.strip()
-    
     if text == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return ConversationHandler.END
-    
     try:
         new_rate = float(text.replace(',', '.'))
         currency_code = context.user_data['selected_currency']
         old_rate = context.user_data['current_rate']
-        
         db.update_exchange_rate(currency_code, new_rate)
-        
         await update.message.reply_text(
             f"✅ Курс обновлен!\n\n"
             f"{context.user_data['flag']} {context.user_data['currency_name']}\n"
@@ -648,16 +643,13 @@ async def enter_new_rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ENTER_NEW_RATE
 
 async def change_delivery_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Изменение цены доставки"""
     user_id = update.effective_user.id
     if not db.is_admin(user_id):
         await update.message.reply_text("У вас нет доступа.")
         return
-    
     methods = db.get_delivery_methods()
     keyboard = [[f"{m['icon']} {m['method_name']} (${m['price_per_kg']}/кг)"] for m in methods] + [["🔙 Назад"]]
     context.user_data['delivery_methods'] = methods
-    
     await update.message.reply_text(
         "🚚 Выберите способ доставки для изменения:",
         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -665,13 +657,10 @@ async def change_delivery_price(update: Update, context: ContextTypes.DEFAULT_TY
     return SELECT_DELIVERY_METHOD
 
 async def select_delivery_for_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор способа доставки для изменения"""
     text = update.message.text.strip()
-    
     if text == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return ConversationHandler.END
-    
     if text in ["💰 Изменить цену за кг", "📅 Изменить сроки доставки"]:
         if text == "💰 Изменить цену за кг":
             await update.message.reply_text(
@@ -695,7 +684,6 @@ async def select_delivery_for_change(update: Update, context: ContextTypes.DEFAU
                 context.user_data['min_days'] = m['min_days']
                 context.user_data['max_days'] = m['max_days']
                 context.user_data['icon'] = m['icon']
-                
                 keyboard = [
                     ["💰 Изменить цену за кг"],
                     ["📅 Изменить сроки доставки"],
@@ -709,25 +697,19 @@ async def select_delivery_for_change(update: Update, context: ContextTypes.DEFAU
                     reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 )
                 return SELECT_DELIVERY_METHOD
-    
     await update.message.reply_text("Способ доставки не найден.")
     return ConversationHandler.END
 
 async def enter_new_delivery_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ввод новой цены доставки"""
     text = update.message.text.strip()
-    
     if text == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return ConversationHandler.END
-    
     try:
         new_price = float(text.replace(',', '.'))
         method_code = context.user_data['selected_method']
         old_price = context.user_data['current_price']
-        
         db.update_delivery_price(method_code, new_price)
-        
         await update.message.reply_text(
             f"✅ Цена обновлена!\n\n"
             f"{context.user_data['icon']} {context.user_data['method_name']}\n"
@@ -740,13 +722,10 @@ async def enter_new_delivery_price(update: Update, context: ContextTypes.DEFAULT
         return ENTER_NEW_PRICE
 
 async def enter_new_delivery_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ввод новых сроков доставки"""
     text = update.message.text.strip()
-    
     if text == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return ConversationHandler.END
-    
     try:
         if '-' in text:
             parts = text.split('-')
@@ -754,10 +733,8 @@ async def enter_new_delivery_days(update: Update, context: ContextTypes.DEFAULT_
             max_days = int(parts[1].strip())
         else:
             min_days = max_days = int(text.strip())
-        
         method_code = context.user_data['selected_method']
         db.update_delivery_days(method_code, min_days, max_days)
-        
         await update.message.reply_text(
             f"✅ Сроки обновлены!\n\n"
             f"{context.user_data['icon']} {context.user_data['method_name']}\n"
@@ -771,28 +748,22 @@ async def enter_new_delivery_days(update: Update, context: ContextTypes.DEFAULT_
         return ENTER_NEW_DAYS
 
 async def manage_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Управление заказами"""
     user_id = update.effective_user.id
     if not db.is_admin(user_id):
         await update.message.reply_text("У вас нет доступа.")
         return
-    
     orders = db.get_recent_orders()
     if not orders:
         await update.message.reply_text("Нет заказов для отображения.")
         return
-    
     text = "📦 Последние заказы:\n\n"
     keyboard = []
-    
     for o in orders:
         status_icon = "🟡" if o['status'] == "В обработке" else "🟢" if o['status'] == "Доставлен" else "🔴"
         text += f"{status_icon} {o['track_code']}\nКлиент: {o['customer_code'] or 'Неизвестен'}\nСтатус: {o['status']}\nЦена: ${o['price'] or 0}\n\n"
         keyboard.append([f"{o['track_code']} - {o['status']}"])
-    
     keyboard.append(["🔙 Назад"])
     context.user_data['recent_orders'] = orders
-    
     await update.message.reply_text(
         text + "Выберите заказ для изменения статуса:",
         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -800,23 +771,18 @@ async def manage_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECT_ORDER_STATUS
 
 async def select_order_for_status_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор заказа для изменения статуса"""
     text = update.message.text
-    
     if text == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return ConversationHandler.END
-    
     track_code = text.split(' - ')[0] if ' - ' in text else text
     orders = context.user_data.get('recent_orders', [])
-    
     for o in orders:
         if o['track_code'] == track_code:
             context.user_data['selected_order_id'] = o['id']
             context.user_data['selected_track_code'] = o['track_code']
             context.user_data['current_status'] = o['status']
             context.user_data['customer_code'] = o['customer_code']
-            
             keyboard = [
                 ["🟡 В обработке"], ["🟢 Доставлен"], ["🔴 Отменен"],
                 ["🚚 В пути"], ["📦 На складе"], ["🔙 Назад"]
@@ -827,22 +793,17 @@ async def select_order_for_status_change(update: Update, context: ContextTypes.D
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             )
             return ConversationHandler.END
-    
     await update.message.reply_text("Заказ не найден.")
     return ConversationHandler.END
 
 async def update_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление статуса заказа"""
     user_id = update.effective_user.id
     if not db.is_admin(user_id):
         return
-    
     text = update.message.text
-    
     if text == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return
-    
     status_map = {
         "🟡 В обработке": "В обработке",
         "🟢 Доставлен": "Доставлен",
@@ -850,11 +811,9 @@ async def update_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE
         "🚚 В пути": "В пути",
         "📦 На складе": "На складе"
     }
-    
     new_status = status_map.get(text)
     if not new_status:
         return
-    
     order_id = context.user_data.get('selected_order_id')
     if order_id:
         db.update_track_code_status(order_id, new_status)
@@ -864,12 +823,10 @@ async def update_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
 async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Рассылка сообщений"""
     user_id = update.effective_user.id
     if not db.is_admin(user_id):
         await update.message.reply_text("У вас нет доступа.")
         return
-    
     keyboard = [
         ["📢 Всем пользователям"],
         ["👥 Только клиентам с заказами"],
@@ -883,15 +840,11 @@ async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return BROADCAST_MESSAGE
 
 async def select_broadcast_audience(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор аудитории рассылки"""
     text = update.message.text
-    
     if text == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return ConversationHandler.END
-    
     cursor = db.conn.cursor()
-    
     if text == "📢 Всем пользователям":
         cursor.execute("SELECT COUNT(*) FROM users")
         count = cursor.fetchone()[0]
@@ -909,23 +862,18 @@ async def select_broadcast_audience(update: Update, context: ContextTypes.DEFAUL
         context.user_data['recipient_count'] = count
     else:
         return ConversationHandler.END
-    
     await update.message.reply_text(
         f"Выбрана аудитория: {text}\nПолучателей: {context.user_data['recipient_count']}\n\nВведите сообщение для рассылки:"
     )
     return BROADCAST_MESSAGE
 
 async def send_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправка рассылки"""
     msg = update.message.text
-    
     if msg == "🔙 Назад":
         await update.message.reply_text("Отменено.", reply_markup=get_main_keyboard(True))
         return ConversationHandler.END
-    
     broadcast_type = context.user_data.get('broadcast_type')
     cursor = db.conn.cursor()
-    
     if broadcast_type == 'all':
         cursor.execute("SELECT user_id FROM users")
     elif broadcast_type == 'with_orders':
@@ -935,11 +883,9 @@ async def send_broadcast_message(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await update.message.reply_text("Тип рассылки не выбран.")
         return ConversationHandler.END
-    
     recipients = cursor.fetchall()
     sent = 0
     failed = 0
-    
     for r in recipients:
         try:
             await context.bot.send_message(
@@ -949,7 +895,6 @@ async def send_broadcast_message(update: Update, context: ContextTypes.DEFAULT_T
             sent += 1
         except:
             failed += 1
-    
     await update.message.reply_text(
         f"📊 Результаты рассылки:\n\n✅ Успешно: {sent}\n❌ Не удалось: {failed}",
         reply_markup=get_main_keyboard(True)
@@ -957,7 +902,6 @@ async def send_broadcast_message(update: Update, context: ContextTypes.DEFAULT_T
     return ConversationHandler.END
 
 async def fix_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Назначить администратором (отладка)"""
     user = update.effective_user
     code = db.register_user(
         user_id=user.id,
@@ -973,11 +917,9 @@ async def fix_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def check_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Проверка базы данных"""
     cursor = db.conn.cursor()
     tables = ['users', 'exchange_rates', 'delivery_methods', 'track_codes']
     res = []
-    
     for t in tables:
         try:
             cursor.execute(f"SELECT COUNT(*) FROM {t}")
@@ -985,11 +927,9 @@ async def check_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             res.append(f"✅ {t}: {cnt} записей")
         except:
             res.append(f"❌ {t}: ошибка")
-    
     await update.message.reply_text("📊 Проверка БД:\n\n" + "\n".join(res))
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отмена действия"""
     user_id = update.effective_user.id
     is_admin = db.is_admin(user_id)
     await update.message.reply_text("❌ Отменено.", reply_markup=get_main_keyboard(is_admin))
@@ -1134,16 +1074,12 @@ def register_handlers(application: Application):
     logger.info("✅ Все обработчики бота зарегистрированы")
 
 # ------------------------- API ЭНДПОИНТЫ -------------------------
-
 @app.get("/api/user/{telegram_id}")
 async def api_get_user(telegram_id: int):
-    """Возвращает данные пользователя"""
     user = db.get_user(telegram_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
     orders = db.get_user_track_codes(telegram_id)
-    
     return {
         "customer_code": user["customer_code"],
         "balance": user["balance"],
@@ -1155,7 +1091,6 @@ async def api_get_user(telegram_id: int):
 
 @app.get("/api/orders/{telegram_id}")
 async def api_get_orders(telegram_id: int):
-    """Возвращает заказы пользователя"""
     orders = db.get_user_track_codes(telegram_id)
     result = []
     for o in orders:
@@ -1170,7 +1105,6 @@ async def api_get_orders(telegram_id: int):
 
 @app.get("/api/exchange_rates")
 async def api_get_exchange_rates():
-    """Возвращает все курсы валют"""
     rates = db.get_exchange_rates()
     result = []
     for r in rates:
@@ -1184,7 +1118,6 @@ async def api_get_exchange_rates():
 
 @app.get("/api/track/{track_code}")
 async def api_track_order(track_code: str):
-    """Поиск трек-кода"""
     cursor = db.conn.cursor()
     cursor.execute("""
         SELECT track_code, status, description, created_date, u.customer_code, price
@@ -1193,10 +1126,8 @@ async def api_track_order(track_code: str):
         WHERE track_code = %s
     """, (track_code.upper(),))
     row = cursor.fetchone()
-    
     if not row:
         raise HTTPException(status_code=404, detail="Track code not found")
-    
     return {
         "track_code": row["track_code"],
         "status": row["status"],
@@ -1208,14 +1139,11 @@ async def api_track_order(track_code: str):
 
 @app.post("/api/balance/update")
 async def api_update_balance(request: Request):
-    """Обновление баланса (для теста)"""
     data = await request.json()
     telegram_id = data.get("telegram_id")
     amount = data.get("amount")
-    
     if not telegram_id or not amount:
         raise HTTPException(status_code=400, detail="Missing telegram_id or amount")
-    
     db.update_balance(telegram_id, amount)
     user = db.get_user(telegram_id)
     return {"new_balance": user["balance"]}
