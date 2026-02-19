@@ -77,9 +77,10 @@ def get_main_keyboard(is_admin=False):
     """Главная клавиатура с новыми пунктами"""
     keyboard = [
         ["👤 Личный кабинет"],
-        ["💰 Курсы валют", "💱 Обмен валют"],
         ["📦 Фулфилмент"],
+        ["💰 Курсы валют", "💱 Обмен валют"],
         ["🚚 Доставка карго", "📄 Белая доставка"],
+        ["✈️ Авиа доставка", "🚆 Ж/Д доставка"],
         ["🏭 Склады в Китае"],
         ["🆘 Поддержка"]
     ]
@@ -226,72 +227,76 @@ async def fullfilment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode='Markdown')
 
-async def delivery_cargo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Меню карго доставки"""
-    methods = db.get_delivery_methods('cargo')
-    if not methods:
-        await update.message.reply_text("Информация о доставке карго временно недоступна.")
-        return
-    
-    keyboard = [[f"{m['icon']} {m['method_name']}"] for m in methods] + [["🔙 Назад"]]
-    await update.message.reply_text(
-        "🚚 Выберите способ карго‑доставки:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+async def delivery_avia(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Информация об авиа доставке"""
+    text = (
+        "✈️ **Авиа доставка**\n\n"
+        "✅ Срок доставки: 3-7 дней\n"
+        "✅ Отслеживание по трек-номеру\n"
+        "✅ Страховка включена\n"
+        "✅ Отправка от 1 кг\n\n"
+        "💰 **Стоимость:** от 10$/кг\n\n"
+        "👤 **Менеджер:** @avia_manager\n"
+        "📱 **WhatsApp:** +7 999 123 45 67"
     )
-    context.user_data['delivery_type'] = 'cargo'
+    await update.message.reply_text(text, parse_mode='Markdown')
+
+async def delivery_cargo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Информация об авто карго доставке"""
+    text = (
+        "🚚 **Авто карго**\n\n"
+        "✅ Срок доставки: 14-21 день\n"
+        "✅ Экономичный вариант\n"
+        "✅ Подходит для крупных партий\n"
+        "✅ Доставка 'от двери до двери'\n\n"
+        "💰 **Стоимость:** от 5$/кг\n\n"
+        "👤 **Менеджер:** @auto_manager\n"
+        "📱 **WhatsApp:** +7 999 234 56 78"
+    )
+    await update.message.reply_text(text, parse_mode='Markdown')
+
+async def delivery_rail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Информация о Ж/Д доставке"""
+    text = (
+        "🚆 **Ж/Д доставка**\n\n"
+        "✅ Срок доставки: 10-15 дней\n"
+        "✅ Фиксированная стоимость\n"
+        "✅ Для больших объёмов\n"
+        "✅ Стабильные сроки\n\n"
+        "💰 **Стоимость:** от 7$/кг\n\n"
+        "👤 **Менеджер:** @rail_manager\n"
+        "📱 **WhatsApp:** +7 999 345 67 89"
+    )
+    await update.message.reply_text(text, parse_mode='Markdown')
 
 async def delivery_white(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Меню белой доставки"""
-    methods = db.get_delivery_methods('white')
-    if not methods:
-        await update.message.reply_text("Информация о белой доставке временно недоступна.")
-        return
-    
-    keyboard = [[f"{m['icon']} {m['method_name']}"] for m in methods] + [["🔙 Назад"]]
-    await update.message.reply_text(
-        "📄 Выберите способ белой доставки:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    """Информация о белой доставке"""
+    text = (
+        "📄 **Белая доставка**\n\n"
+        "✅ Полное таможенное оформление\n"
+        "✅ Все документы предоставляются\n"
+        "✅ Работа с юридическими лицами\n"
+        "✅ НДС и пошлины включены\n\n"
+        "💰 **Стоимость:** от 15$/кг\n\n"
+        "👤 **Менеджер:** @white_manager\n"
+        "📱 **WhatsApp:** +7 999 456 78 90"
     )
-    context.user_data['delivery_type'] = 'white'
-
-async def handle_delivery_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Детали выбранного способа доставки"""
-    text = update.message.text
-    
-    if text == "🔙 Назад":
-        user_id = update.effective_user.id
-        is_admin = db.is_admin(user_id)
-        await update.message.reply_text("Главное меню:", reply_markup=get_main_keyboard(is_admin))
-        return
-    
-    method_text = text[2:].strip() if len(text) > 2 else text
-    delivery_type = context.user_data.get('delivery_type', 'cargo')
-    methods = db.get_delivery_methods(delivery_type)
-    
-    for m in methods:
-        if m['method_name'] == method_text:
-            price = m['price_per_kg']
-            await update.message.reply_text(
-                f"{m['icon']} {m['method_name']}\n\n"
-                f"💰 Цена: ${price} за кг\n"
-                f"📅 Срок: {m['min_days']}-{m['max_days']} дней\n"
-                f"📝 {m['description']}\n\n"
-                f"Пример: 5 кг = ${price * 5}"
-            )
-            return
-    
-    await update.message.reply_text("Способ доставки не найден.")
+    await update.message.reply_text(text, parse_mode='Markdown')
 
 async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Поддержка"""
-    await update.message.reply_text(
+    """Поддержка с контактами менеджеров"""
+    text = (
         "🆘 **Поддержка**\n\n"
-        "👤 **Telegram менеджер:** @goldendragon_manager\n"
+        "👤 **Основной менеджер:** @goldendragon_manager\n"
         "📱 **WhatsApp:** +7 999 123 45 67\n"
-        "💬 **WeChat:** golden_dragon_cn\n"
-        "⏰ **Время работы:** 9:00 - 18:00 (МСК)",
-        parse_mode='Markdown'
+        "💬 **WeChat:** golden_dragon_cn\n\n"
+        "👤 **Менеджер по доставке:** @delivery_manager\n"
+        "📱 **WhatsApp:** +7 999 234 56 78\n\n"
+        "👤 **Менеджер по фулфилменту:** @fulfillment_support\n"
+        "📱 **WhatsApp:** +7 999 345 67 89\n\n"
+        "⏰ **Время работы:** 9:00 - 18:00 (МСК)"
     )
+    await update.message.reply_text(text, parse_mode='Markdown')
 
 async def warehouses_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню складов в Китае"""
@@ -311,7 +316,9 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
     text = update.message.text
     
     if text == "🔙 Назад":
-        await warehouses_menu(update, context)
+        user_id = update.effective_user.id
+        is_admin = db.is_admin(user_id)
+        await update.message.reply_text("Главное меню:", reply_markup=get_main_keyboard(is_admin))
         return
     
     warehouses = {
@@ -335,8 +342,7 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
     info = warehouses.get(text)
     if info:
         await update.message.reply_text(
-            f"{text}\n\n📍 **Адрес:** {info['address']}\n📦 **Условия:** {info['conditions']}\n{info['contact']}\n\n"
-            "Для возврата нажмите '🔙 Назад'",
+            f"{text}\n\n📍 **Адрес:** {info['address']}\n📦 **Условия:** {info['conditions']}\n{info['contact']}",
             parse_mode='Markdown'
         )
     else:
@@ -974,16 +980,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "👤 Личный кабинет":
         await personal_cabinet(update, context)
+    elif text == "📦 Фулфилмент":
+        await fullfilment(update, context)
     elif text == "💰 Курсы валют":
         await exchange_rates_menu(update, context)
     elif text == "💱 Обмен валют":
         pass  # ConversationHandler
-    elif text == "📦 Фулфилмент":
-        await fullfilment(update, context)
     elif text == "🚚 Доставка карго":
         await delivery_cargo(update, context)
     elif text == "📄 Белая доставка":
         await delivery_white(update, context)
+    elif text == "✈️ Авиа доставка":
+        await delivery_avia(update, context)
+    elif text == "🚆 Ж/Д доставка":
+        await delivery_rail(update, context)
     elif text == "🏭 Склады в Китае":
         await warehouses_menu(update, context)
     elif text.startswith("🏭 Склад"):
@@ -1013,12 +1023,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"👥 Пользователи:\n\nВсего: {len(users)}\nАдминов: {admins}\nОбычных: {len(users)-admins}"
         )
-    elif any(icon in text for icon in ["🚚", "✈️", "🚆"]):
-        await handle_delivery_method(update, context)
-    elif " - " in text and is_admin:
-        await select_order_for_status_change(update, context)
-    elif text in ["🟡 В обработке", "🟢 Доставлен", "🔴 Отменен", "🚚 В пути", "📦 На складе"] and is_admin:
-        await update_order_status(update, context)
     elif text == "🔙 Назад":
         await update.message.reply_text("Главное меню:", reply_markup=get_main_keyboard(is_admin))
     else:
