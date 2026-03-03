@@ -10,6 +10,36 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 class Database:
     def __init__(self):
         self.conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        self._init_tables()
+
+    def _init_tables(self):
+        """Инициализация всех таблиц при запуске"""
+        try:
+            # Создаем таблицу payments, если её нет
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS payments (
+                        id SERIAL PRIMARY KEY,
+                        payment_id VARCHAR(255) UNIQUE NOT NULL,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        amount DECIMAL(10,2) NOT NULL,
+                        status VARCHAR(50) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        confirmed_at TIMESTAMP,
+                        metadata JSONB
+                    )
+                """)
+                
+                # Создаем индексы для оптимизации
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_payments_payment_id ON payments(payment_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
+                
+                self.conn.commit()
+                print("✅ Таблица payments проверена/создана")
+        except Exception as e:
+            print(f"⚠️ Ошибка при инициализации таблицы payments: {e}")
+            self.conn.rollback()
 
     def _execute_query(self, query, params=None, fetchone=False, fetchall=False):
         """Вспомогательный метод для выполнения запросов с обработкой ошибок"""
@@ -307,4 +337,128 @@ class Database:
             print(f"Error in get_all_users: {e}")
             return []
 
+    # ------------------------- ПЛАТЕЖИ (ЮKassa) -------------------------
+    def create_payment_record(self, payment_id, user_id, amount, status='pending', metadata=None):
+        """Создает запись о платеже в базе данных"""
+        try:
+            # Получаем внутренний ID пользователя
+            with self.conn.cursor() as cur:
+                cur.execute("SELECT id FROM users WHERE telegram_id = %s", (user_id,))
+                user = cur.fetchone()
+                if not user:
+                    print(f"❌ Пользователь с telegram_id {user_id} не найден")
+                    return None
+                
+                cur.execute("""
+                    INSERT INTO payments (payment_id, user_id, amount, status, metadata)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (payment_id, user['id'], amount, status, json.dumps(metadata) if metadata else None))
+                self.conn.commit()
+                result = cur.fetchone()
+                print(f"✅ Запись о платеже создана: {payment_id}")
+                return result['id'] if result else None
+        except Exception as e:
+            self.conn.rollback()
+            print(f"❌ Error in create_payment_record: {e}")
+            return None
+
+    def update_payment_status(self, payment_id, status):
+        """Обновляет статус платежа"""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE payments
+                    SET status = %s, confirmed_at = CASE WHEN %s = 'succeeded' THEN NOW() ELSE confirmed_at END
+                    WHERE payment_id = %s
+                    RETURNING user_id
+                """, (status, status, payment_id))
+                self.conn.commit()
+                result = cur.fetchone()
+                if result:
+                    # Получаем telegram_id пользователя
+                    cur.execute("SELECT telegram_id FROM users WHERE id = %s", (result['user_id'],))
+                    user = cur.fetchone()
+                    telegram_id = user['telegram_id'] if user else None
+                    print(f"✅ Статус платежа {payment_id} обновлен на {status}")
+                    return telegram_id
+                return None
+        except Exception as e:
+            self.conn.rollback()
+            print(f"❌ Error in update_payment_status: {e}")
+            return None
+
+    def get_payment_by_id(self, payment_id):
+        """Получает информацию о платеже по ID"""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    SELECT p.*, u.telegram_id, u.customer_code
+                    FROM payments p
+                    JOIN users u ON p.user_id = u.id
+                    WHERE p.payment_id = %s
+                """, (payment_id,))
+                return cur.fetchone()
+        except Exception as e:
+            print(f"❌ Error in get_payment_by_id: {e}")
+            return None
+
+    def get_user_payments(self, telegram_id, limit=20):
+        """Получает историю платежей пользователя"""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    SELECT p.*
+                    FROM payments p
+                    JOIN users u ON p.user_id = u.id
+                    WHERE u.telegram_id = %s
+                    ORDER BY p.created_at DESC
+                    LIMIT %s
+                """, (telegram_id, limit))
+                return cur.fetchall()
+        except Exception as e:
+            print(f"❌ Error in get_user_payments: {e}")
+            return []
+
+    def get_all_payments(self, limit=50):
+        """Получает все платежи (для админки)"""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    SELECT p.*, u.customer_code, u.telegram_id
+                    FROM payments p
+                    JOIN users u ON p.user_id = u.id
+                    ORDER BY p.created_at DESC
+                    LIMIT %s
+                """, (limit,))
+                return cur.fetchall()
+        except Exception as e:
+            print(f"❌ Error in get_all_payments: {e}")
+            return []
+
+    def get_payment_stats(self):
+        """Получает статистику по платежам (для админки)"""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) as total_count,
+                        SUM(CASE WHEN status = 'succeeded' THEN amount ELSE 0 END) as total_success_amount,
+                        COUNT(CASE WHEN status = 'succeeded' THEN 1 END) as success_count,
+                        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count,
+                        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_count
+                    FROM payments
+                """)
+                return cur.fetchone()
+        except Exception as e:
+            print(f"❌ Error in get_payment_stats: {e}")
+            return {
+                'total_count': 0,
+                'total_success_amount': 0,
+                'success_count': 0,
+                'pending_count': 0,
+                'failed_count': 0
+            }
+
+# Глобальный экземпляр базы данных
 db = Database()
