@@ -361,6 +361,57 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
     
     logger.info(f"Успешный платеж от пользователя {user_id}: {amount_rub} руб.")
 
+async def payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий на inline кнопки для проверки оплаты"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data.startswith('check_payment_'):
+        payment_id = query.data.replace('check_payment_', '')
+        
+        # Получаем информацию о платеже из ЮKassa
+        payment_info = yookassa.get_payment(payment_id)
+        
+        if payment_info:
+            status = payment_info.get('status')
+            
+            if status == 'succeeded':
+                # Обновляем статус в БД
+                user_id = db.update_payment_status(payment_id, 'succeeded')
+                
+                if user_id:
+                    # Получаем сумму из метаданных или из ответа
+                    amount = float(payment_info['amount']['value'])
+                    
+                    # Пополняем баланс пользователя
+                    db.update_balance(user_id, amount)
+                    
+                    # Получаем обновленные данные пользователя
+                    user = db.get_user(user_id)
+                    
+                    await query.edit_message_text(
+                        f"✅ Оплата прошла успешно!\n\n"
+                        f"💰 Сумма: {amount} руб.\n"
+                        f"💳 Новый баланс: {user['balance']} руб.\n\n"
+                        f"Спасибо за использование Golden Dragon!"
+                    )
+                else:
+                    await query.edit_message_text(
+                        "❌ Не удалось обновить статус платежа. Обратитесь в поддержку."
+                    )
+            elif status == 'pending':
+                await query.edit_message_text(
+                    "⏳ Платеж еще обрабатывается. Обычно это занимает несколько минут.\n\n"
+                    "Попробуйте проверить позже или нажмите кнопку оплаты, если еще не оплатили."
+                )
+            else:
+                await query.edit_message_text(
+                    f"❌ Статус платежа: {status}\n\n"
+                    f"Если вы оплатили, но статус не обновился, свяжитесь с поддержкой."
+                )
+        else:
+            await query.edit_message_text("❌ Не удалось получить информацию о платеже.")
+
 async def payment_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает историю платежей пользователя"""
     user_id = update.effective_user.id
